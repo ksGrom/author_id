@@ -1,12 +1,14 @@
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics import f1_score, confusion_matrix
 from sklearn.linear_model import SGDClassifier
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import f1_score
 from pymorphy2 import MorphAnalyzer
 from nltk.corpus import stopwords
 from multiprocessing import Pool
 from scipy.sparse import hstack
+import matplotlib.pyplot as plt
 from tqdm import tqdm
+import seaborn as sns
 import pandas as pd
 import numpy as np
 import random
@@ -35,22 +37,7 @@ def check_work_titles_uniqueness(df, raise_exception=True):
         return max_unique_n <= 1
 
 
-# def get_work_titles_for_cv(df):
-#     author_titles_dict = df.groupby('author')['work_title'].apply(set).apply(list)\
-#         .apply(lambda x: random.sample(x, k=len(x))).to_dict()
-#     n_titles_left = df.work_title.unique().shape[0]
-#     author_list, work_title_list = [], []
-#     while n_titles_left > 0:
-#         for author in author_titles_dict:
-#             current_title_set = author_titles_dict[author]
-#             if len(current_title_set) > 0:
-#                 work_title = current_title_set.pop()
-#                 n_titles_left -= 1
-#                 author_list.append(author), work_title_list.append(work_title)
-#     return author_list, work_title_list
-
-
-def fit_predict_(clf_train_test: tuple):
+def _fit_predict_for_pool(clf_train_test: tuple):
     clf, X_train, X_test, y_train, y_test = clf_train_test
     clf.fit(X_train, y_train)
     y_pred_test = pd.Series(clf.predict(X_test), index=y_test.index)
@@ -73,7 +60,7 @@ def leave_one_title_out_cv_predictions(clf, df, n_jobs=6):
         dataset_list.append((copy.deepcopy(clf), X_train, X_test, y_train, y_test))
     with Pool(n_jobs) as p:
         clf_and_prediction_list = list(tqdm(
-            p.imap(fit_predict_, dataset_list),
+            p.imap(_fit_predict_for_pool, dataset_list),
             total=len(dataset_list)
         ))
     predictions = pd.concat([i[1] for i in clf_and_prediction_list], axis=0)
@@ -82,31 +69,33 @@ def leave_one_title_out_cv_predictions(clf, df, n_jobs=6):
 
 
 def leave_one_title_out_cv_score(
-        df, *,
+        df,
+        *,
         clf=None,
         predictions=None,
-        f1_average='weighted'
+        f1_average='micro'
 ):
     if (clf is not None and predictions is not None) or \
             (clf is None and predictions is None):
         ValueError("Either clf or predictions must be passed!")
     work_title_list = []
     score_list = []
+    average_score = 0
     if clf is not None:
         predictions, _ = leave_one_title_out_cv_predictions(clf, df)
     for work_title in df.work_title.unique():
         X_train, X_test, y_train, y_test = drop_work_title(df, work_title)
         if df.author.unique().shape[0] <= 2:
             pos_label = y_test.iloc[0]
-            f1_average = None
+            f1_average = 'binary'
         else:
             pos_label = None
-        score_list.append(
-            f1_score(y_test, predictions[y_test.index],
-                     pos_label=pos_label, average=f1_average)
-        )
+        score = f1_score(y_test, predictions[y_test.index],
+                         pos_label=pos_label, average=f1_average)
+        score_list.append(score)
+        average_score += score * y_test.shape[0] / df.shape[0]
         work_title_list.append(work_title)
-    return predictions, work_title_list, score_list
+    return predictions, work_title_list, score_list, average_score
 
 
 class CustomTfidfVectorizer:
@@ -237,3 +226,32 @@ class AuthorIdentificationTfidfPipeline:
         }
         if type(value) is dict:
             self.__sgd_args.update(value)
+
+
+def author_rus_surnames(df):
+    return df.groupby('author')['author_surname'].describe().top.to_dict()
+
+
+def plot_confusion_matrix(y_true, y_pred, rus_translation=None):
+    labels = y_true.unique()
+    if rus_translation is not None:
+        labels_rus = list(map(lambda x: rus_translation[x], labels))
+    else:
+        labels_rus = labels
+    sns.set(rc={'figure.figsize': (5, 4)})
+    sns.heatmap(
+        confusion_matrix(y_true, y_pred, labels=labels),
+        xticklabels=labels_rus,
+        yticklabels=labels_rus,
+        annot=True,
+        fmt="d"
+    )
+    plt.show()
+
+
+def false_predictions(df, y_true, y_pred):
+    res = pd.DataFrame(np.vstack([y_true, y_pred]).T, columns=['y_true', 'y_pred'])
+    res = pd.concat([res, df], axis=1)
+    res = res.drop('author', axis=1)
+    return res[res.y_true != res.y_pred]
+
