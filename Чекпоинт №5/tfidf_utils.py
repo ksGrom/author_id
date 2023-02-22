@@ -77,7 +77,7 @@ def leave_one_title_out_cv_score(
 ):
     if (clf is not None and predictions is not None) or \
             (clf is None and predictions is None):
-        ValueError("Either clf or predictions must be passed!")
+        raise ValueError("Either clf or predictions must be passed!")
     work_title_list = []
     score_list = []
     average_score = 0
