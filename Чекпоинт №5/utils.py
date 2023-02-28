@@ -121,19 +121,28 @@ def show_lemmas_histplot(df, title):
     plt.show()
 
 
-def sentence_generator(text, offset=0):
+def _get_punct_pos_list(text, punct_marks=".?!…"):
+    p = re.compile(f"[{punct_marks}]")
+    pos_iter = p.finditer(text)
+    return [m.start() for m in pos_iter]
+
+
+def sentence_generator(text, punct_offset=0, punct_pos=None):
     """Генератор предложений. Отдает по одному предложению
     из входного текста (`text`) за итерацию.
     """
-    punct = ".?!…"
-    p = re.compile(f"[{punct}]")
-    for m in p.finditer(text):
-        if m.start() + 1 > offset:
-            end_pos = m.start() + 1
-            while (end_pos < len(text)) and not text[end_pos].isalpha():
-                end_pos += 1
-            yield text[offset:end_pos].strip()
-            offset = end_pos
+    if punct_pos is None:
+        punct_pos = _get_punct_pos_list(text)
+    start_pos = punct_pos[punct_offset - 1] + 1 if punct_offset != 0 else 0
+    for pos in punct_pos[punct_offset:]:
+        end_pos = pos + 1
+        while (start_pos < len(text)) and not text[start_pos].isalpha():
+            start_pos += 1
+        while (end_pos < len(text)) and not text[end_pos].isalpha():
+            end_pos += 1
+        if start_pos < end_pos:
+            yield text[start_pos:end_pos].strip()
+        start_pos = end_pos
 
 
 def excerpt_generator(text, excerpt_len, offset_n_words='excerpt_len'):
@@ -155,11 +164,12 @@ def excerpt_generator(text, excerpt_len, offset_n_words='excerpt_len'):
         Если `'excerpt_len'` (по-умолчанию), то устанавливается равным длине
         отрывка; в этом случае отрывки не пересекаются.
     """
-    offset = 0
+    sentence_offset = 0
     stop = False
+    punct_pos = _get_punct_pos_list(text)
     while not stop:
         excerpt = ''
-        for sentence in sentence_generator(text, offset):
+        for sentence in sentence_generator(text, sentence_offset, punct_pos):
             excerpt += (' ' + sentence)
             if len(excerpt.split()) >= excerpt_len:
                 yield excerpt.strip()
@@ -167,7 +177,7 @@ def excerpt_generator(text, excerpt_len, offset_n_words='excerpt_len'):
 
         stop = True
         tmp_excerpt = ''
-        for sentence in sentence_generator(text, offset):
+        for sentence in sentence_generator(text, offset, punct_pos):
             tmp_excerpt += (' ' + sentence)
             if len(tmp_excerpt.split()) >= offset_n_words:
                 offset += len(tmp_excerpt)
