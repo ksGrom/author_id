@@ -1,32 +1,13 @@
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics import f1_score, confusion_matrix
+from sklearn.metrics import f1_score
 from sklearn.linear_model import SGDClassifier
 from sklearn.pipeline import Pipeline
-from pymorphy2 import MorphAnalyzer
-from nltk.corpus import stopwords
 from multiprocessing import Pool
 from scipy.sparse import hstack
-import matplotlib.pyplot as plt
 from tqdm import tqdm
-import seaborn as sns
 import pandas as pd
-import numpy as np
-import random
 import copy
 import re
-
-
-def lemmatize(doc, remove_stop_words=True, patterns=r'[^а-яё ]+'):
-    morph = MorphAnalyzer()
-    doc = re.sub(patterns, ' ', doc.lower()).strip()
-    tokens = []
-    stopwords_ru = stopwords.words("russian") if remove_stop_words else ''
-    for token in doc.split():
-        if token and token.strip() not in stopwords_ru:
-            token = token.strip()
-            token = morph.normal_forms(token)[0]
-            tokens.append(token)
-    return tokens
 
 
 def check_work_titles_uniqueness(df, raise_exception=True):
@@ -226,32 +207,3 @@ class AuthorIdentificationTfidfPipeline:
         }
         if type(value) is dict:
             self.__sgd_args.update(value)
-
-
-def author_rus_surnames(df):
-    return df.groupby('author')['author_surname'].describe().top.to_dict()
-
-
-def plot_confusion_matrix(y_true, y_pred, rus_translation=None):
-    labels = y_true.unique()
-    if rus_translation is not None:
-        labels_rus = list(map(lambda x: rus_translation[x], labels))
-    else:
-        labels_rus = labels
-    sns.set(rc={'figure.figsize': (5, 4)})
-    sns.heatmap(
-        confusion_matrix(y_true, y_pred, labels=labels),
-        xticklabels=labels_rus,
-        yticklabels=labels_rus,
-        annot=True,
-        fmt="d"
-    )
-    plt.show()
-
-
-def false_predictions(df, y_true, y_pred):
-    res = pd.DataFrame(np.vstack([y_true, y_pred]).T, columns=['y_true', 'y_pred'])
-    res = pd.concat([res, df], axis=1)
-    res = res.drop('author', axis=1)
-    return res[res.y_true != res.y_pred]
-
