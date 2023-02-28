@@ -17,6 +17,20 @@ plt.style.use('ggplot')
 morph = MorphAnalyzer()
 
 
+def _replace_punctuation_marks(text):
+    replacements = {
+        "...": "…",
+        "–": "—",
+        "«": "\"",
+        "»": "\"",
+        "\n": " "
+    }
+    for key, val in replacements.items():
+        text = text.replace(key, val)
+    text = re.sub(' +', ' ', text)
+    return text
+
+
 def df_from_txt_files(dataset_name, dir_path="./texts"):
     """Создает датафрейм с сырыми данными из текстовых файлов.
     Столбцы: автор (по названию папки), фамилия автора на русском
@@ -72,7 +86,7 @@ def df_from_txt_files(dataset_name, dir_path="./texts"):
     dataset_list = []
     for title, path in title_path_dict.items():
         with open(path, 'r', encoding='utf-8') as f:
-            text = f.read()[:-2000]
+            text = _replace_punctuation_marks(f.read()[:-2000])
         author = title_author_dict[title]
         dataset_list.append({
             'author': author,
@@ -121,28 +135,25 @@ def show_lemmas_histplot(df, title):
     plt.show()
 
 
-def _get_punct_pos_list(text, punct_marks=".?!…"):
-    p = re.compile(f"[{punct_marks}]")
-    pos_iter = p.finditer(text)
-    return [m.start() for m in pos_iter]
-
-
-def sentence_generator(text, punct_offset=0, punct_pos=None):
+def sentence_generator(text, offset=0, punct_marks=".?!…", yield_pos=False):
     """Генератор предложений. Отдает по одному предложению
     из входного текста (`text`) за итерацию.
     """
-    if punct_pos is None:
-        punct_pos = _get_punct_pos_list(text)
-    start_pos = punct_pos[punct_offset - 1] + 1 if punct_offset != 0 else 0
-    for pos in punct_pos[punct_offset:]:
-        end_pos = pos + 1
-        while (start_pos < len(text)) and not text[start_pos].isalpha():
-            start_pos += 1
-        while (end_pos < len(text)) and not text[end_pos].isalpha():
-            end_pos += 1
-        if start_pos < end_pos:
-            yield text[start_pos:end_pos].strip()
-        start_pos = end_pos
+    punct_marks = set(punct_marks)
+    while offset < len(text) and not text[offset].isalpha():
+        offset += 1
+    start_pos = i = offset
+    while i < len(text):
+        if text[i] in punct_marks:
+            while i < len(text) and not text[i].isalpha():
+                i += 1
+            end_pos = i
+            if not yield_pos:
+                yield text[start_pos:end_pos].strip()
+            else:
+                yield start_pos, end_pos
+            start_pos = end_pos
+        i += 1
 
 
 def excerpt_generator(text, excerpt_len, offset_n_words='excerpt_len'):
@@ -164,23 +175,24 @@ def excerpt_generator(text, excerpt_len, offset_n_words='excerpt_len'):
         Если `'excerpt_len'` (по-умолчанию), то устанавливается равным длине
         отрывка; в этом случае отрывки не пересекаются.
     """
-    sentence_offset = 0
+    if type(offset_n_words) is not int:
+        offset_n_words = excerpt_len
+    offset = 0
     stop = False
-    punct_pos = _get_punct_pos_list(text)
     while not stop:
         excerpt = ''
-        for sentence in sentence_generator(text, sentence_offset, punct_pos):
+        for sentence in sentence_generator(text, offset):
             excerpt += (' ' + sentence)
             if len(excerpt.split()) >= excerpt_len:
                 yield excerpt.strip()
                 break
 
         stop = True
-        tmp_excerpt = ''
-        for sentence in sentence_generator(text, offset, punct_pos):
-            tmp_excerpt += (' ' + sentence)
-            if len(tmp_excerpt.split()) >= offset_n_words:
-                offset += len(tmp_excerpt)
+        offset_excerpt_len = 0
+        for start_pos, end_pos in sentence_generator(text, offset, yield_pos=True):
+            offset_excerpt_len += len(text[start_pos:end_pos].split())
+            if offset_excerpt_len >= offset_n_words:
+                offset += len(text[offset:end_pos])
                 stop = False
                 break
 

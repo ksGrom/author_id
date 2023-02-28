@@ -128,7 +128,10 @@ class CustomTfidfVectorizer:
             "«": "\"",
             "»": "\""
         }
-        return text.translate(str.maketrans(replacements))
+        for key, val in replacements.items():
+            text = text.replace(key, val)
+        text = re.sub(' +', ' ', text)
+        return text
 
     @property
     def patterns(self):
