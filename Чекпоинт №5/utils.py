@@ -330,3 +330,4 @@ def undersampling(df):
         n_drop = df.author.value_counts()[author] - min_count
         idx_drop = res_df[res_df.author == author].sample(n_drop).index
         res_df.drop(idx_drop, inplace=True)
+    return res_df

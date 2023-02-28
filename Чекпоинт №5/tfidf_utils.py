@@ -126,7 +126,8 @@ class CustomTfidfVectorizer:
             "...": "…",
             "–": "—",
             "«": "\"",
-            "»": "\""
+            "»": "\"",
+            "\n": " "
         }
         for key, val in replacements.items():
             text = text.replace(key, val)
