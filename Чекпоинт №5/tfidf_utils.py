@@ -196,6 +196,9 @@ class AuthorIdentificationTfidfPipeline:
     def predict(self, X):
         return self.pipeline.predict(X)
 
+    def predict_proba(self, X):
+        return self.pipeline.predict_proba(X)
+
     @property
     def sgd_classifier_args(self):
         return self.__sgd_args

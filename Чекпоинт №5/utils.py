@@ -1,4 +1,6 @@
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
+from sklearn.metrics import f1_score
 from pymorphy2 import MorphAnalyzer
 from collections import namedtuple
 from nltk.corpus import stopwords
@@ -110,7 +112,7 @@ def show_work_titles_histplot(df, title):
 
 
 def show_excerpts_histplot(df, title, num_of_words=None):
-    sns.set(rc={'figure.figsize': (14,4)})
+    sns.set(rc={'figure.figsize': (14, 4)})
     y = sns.histplot(data=df, x='author_surname')
     if num_of_words is None:
         sample_size = min(df.shape[0], 500)
@@ -217,8 +219,25 @@ def _tqdm(iterator, *, total, verbose):
 def make_dataset_of_excerpts(df, excerpt_num_of_words=250,
                              offset='excerpt_len', verbose=1):
     """Из датафрейма с текстами создает датафрейм с отрывками
-    по `excerpt_num_of_words` слов (+ слова до конца последнего
-    в отрывке предложения).
+    по не менее чем `excerpt_num_of_words` слов. Каждый отрывок подбирается так,
+    чтобы первое и последнее предложения в нем входили в него целиком.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Обрабатываемый датафрейм.
+
+    excerpt_num_of_words : int, default=250
+        Минимальная длина отрывка в словах. Если текст меньше данной длины,
+        то не будет сгенерировано ни одного отрывка.
+
+    offset : int, default='excerpt_len'
+        Отступ в словах начала очередного отрывка от начала предыдущего отрывка.
+        Если `'excerpt_len'` (по-умолчанию), то устанавливается равным длине
+        отрывка; в этом случае отрывки не пересекаются.
+
+    verbose : {0, 1}, default=1
+        Если 1, то показывает полосу прогресса (tqdm).
     """
     dataset_list = []
     pbar = _open_tqdm(verbose, df.shape[0])
@@ -331,3 +350,52 @@ def undersampling(df):
         idx_drop = res_df[res_df.author == author].sample(n_drop).index
         res_df.drop(idx_drop, inplace=True)
     return res_df
+
+
+def df_leave_authors(df, authors):
+    mask = None
+    for author in authors:
+        if mask is None:
+            mask = (df.author == author)
+        else:
+            mask = mask | (df.author == author)
+    return df[mask].copy(deep=True)
+
+
+def __one_experiment__score_n_samples(clf, df_train, df_test, n_samples):
+    df_train_current, _ = train_test_split(
+        df_train,
+        train_size=n_samples,
+        stratify=df_train.author
+    )
+    clf.fit(df_train_current)
+    y_test = df_test.author
+    y_pred = clf.predict(df_test)
+    if df_test.author.unique().shape[0] <= 2:
+        pos_label = y_test.iloc[0]
+        f1_average = 'binary'
+    else:
+        pos_label = None
+        f1_average = 'weighted'
+    return f1_score(df_test.author, y_pred, average=f1_average, pos_label=pos_label)
+
+
+def experiments__score_n_samples(clf, df_train, df_test, authors,
+                                 n_points=10, verbose=1):
+    df_train = undersampling(df_leave_authors(df_train, authors))
+    df_test = df_leave_authors(df_test, authors)
+    n_samples_max = df_train.author.value_counts()[0]
+    n_samples_min = n_samples_max // n_points
+    f1_scores, n_samples_list = [], []
+    pbar = _open_tqdm(verbose, sum(range(1, n_points+1)))
+    for n in range(1, n_points+1):
+        n_samples = n * n_samples_min
+        f1_scores.append(
+            __one_experiment__score_n_samples(
+                clf, df_train, df_test, n_samples
+            )
+        )
+        n_samples_list.append(n_samples)
+        pbar.update(n)
+    pbar.close()
+    return n_samples_list, f1_scores
