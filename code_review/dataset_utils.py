@@ -292,7 +292,7 @@ def input_file_to_df(file):
         if 'text' not in df.columns:
             raise ValueError("no `text` column in input file")
     elif file_ext == 'txt':
-        df = pd.DataFrame([[file.read().decode('utf-8')]], columns=['text'])
+        df = pd.DataFrame([[file.read()]], columns=['text'])
     else:
         raise ValueError("invalid file extension")
     return df

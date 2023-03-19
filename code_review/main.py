@@ -1,7 +1,12 @@
 from argparse import ArgumentParser
 import joblib
+import nltk
+nltk.download('stopwords')
 
-from dataset_utils import input_file_to_df
+from dataset_utils import (
+    input_file_to_df, 
+    add_lemmas_column
+)
 
 
 def parse_args():
@@ -20,6 +25,7 @@ def parse_args():
 def main(args):
     with open(args.input, 'r') as f:
         df = input_file_to_df(f)
+    df = add_lemmas_column(df)
     clf = joblib.load("default.pkl")
     df['predictions'] = clf.predict(df)
     df.to_csv(args.output)
