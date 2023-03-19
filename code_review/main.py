@@ -1,12 +1,12 @@
 from argparse import ArgumentParser
 import joblib
 import nltk
-nltk.download('stopwords')
-
 from dataset_utils import (
     input_file_to_df, 
     add_lemmas_column
 )
+
+nltk.download('stopwords')
 
 
 def parse_args():
