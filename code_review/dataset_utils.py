@@ -261,6 +261,9 @@ def add_lemmas_column(df, inplace=False, verbose=1, n_jobs=6):
 
 
 def undersampling(df):
+    """Возвращает датафрейм с уменьшенной численностью классов
+    до минимальной среди классов численности.
+    """
     res_df = df.copy(deep=True)
     min_count = df.author.value_counts().min()
     for author in df.author.unique():
@@ -270,7 +273,9 @@ def undersampling(df):
     return res_df
 
 
-def df_leave_authors(df, authors):
+def df_leave_authors(df: pd.DataFrame, authors: list):
+    """Возвращает датафрейм без указанных в списке `authors` авторов.
+    """
     mask = None
     for author in authors:
         if mask is None:
@@ -278,3 +283,16 @@ def df_leave_authors(df, authors):
         else:
             mask = mask | (df.author == author)
     return df[mask].copy(deep=True)
+
+
+def input_file_to_df(file):
+    file_ext = str(file.name).split(".")[-1]
+    if file_ext == 'csv':
+        df = pd.read_csv(file)
+        if 'text' not in df.columns:
+            raise ValueError("no `text` column in input file")
+    elif file_ext == 'txt':
+        df = pd.DataFrame([[file.read().decode('utf-8')]], columns=['text'])
+    else:
+        raise ValueError("invalid file extension")
+    return df
