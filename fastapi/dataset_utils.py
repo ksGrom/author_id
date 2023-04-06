@@ -60,7 +60,7 @@ def df_from_txt_files(dataset_name, dir_path="./texts"):
     )
 
     if len(file_paths) == 0:
-        raise FileNotFoundError
+        raise FileNotFoundError("No files found!")
 
     # Находим файлы с информацией о каждом авторе
     # (AUTHOR.txt, сейчас там только фамилия на русском)
@@ -80,6 +80,8 @@ def df_from_txt_files(dataset_name, dir_path="./texts"):
     # Создаем словарь "название произведения" (по названию файла) - "путь к файлу"
     title_path_dict = {path.split("\\")[-1].split(".")[0]
                        : path for path in file_paths}
+    if 'AUTHOR' not in author__rus_surname__dict:
+        raise FileNotFoundError("Each folder must contain `AUTHOR.txt` file.")
     del title_path_dict['AUTHOR']
     # Создаем словарь "название произведения" - "автор"
     title_author_dict = {path.split("\\")[-1].split(".")[0]
@@ -92,6 +94,9 @@ def df_from_txt_files(dataset_name, dir_path="./texts"):
         with open(path, 'r', encoding='utf-8') as f:
             text = _replace_punctuation_marks(f.read()[:-2000])
         author = title_author_dict[title]
+        if author not in author__rus_surname__dict:
+            raise FileNotFoundError(f"Each folder must contain `AUTHOR.txt` "
+                                    f"file. Not found for `{author}`.")
         dataset_list.append({
             'author': author,
             'author_surname': author__rus_surname__dict[author],
@@ -274,7 +279,7 @@ def add_lemmas_column(df, inplace=False, verbose=0, n_jobs=1):
 
 def undersampling(df):
     """Возвращает датафрейм с уменьшенной численностью классов
-    до минимальной среди классов численности.
+    до наименьшей среди классов.
     """
     res_df = df.copy(deep=True)
     min_count = df.author.value_counts().min()
@@ -298,6 +303,25 @@ def df_leave_authors(df: pd.DataFrame, authors: list):
 
 
 def input_file_to_df(file, filename=None):
+    """Создает `pandas.DataFrame` из входного файла `file`.
+
+    Parameters
+    ----------
+    file : file-like object
+        csv-файл с набором текстов или txt-файл с одним текстом.
+        Файл должен быть открыт в бинарном режиме.
+
+    filename : str
+        Имя файла с расширением; обязательный аргумент в случае, если
+        у `file` нет атрибута `name`. Используется только для
+        проверки расширения.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        Набор текстов - `pandas.DataFrame` со столбцом `text`.
+        Столбцы исходной таблицы сохраняются.
+    """
     TextIOWrapper(BytesIO(file.read()), encoding='utf-8').read(256)
     file.seek(0)
 
