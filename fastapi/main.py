@@ -23,8 +23,8 @@ async def root():
     return {'message': 'OK'}
 
 
-@app.post("/predict_items")
-def predict_items(upload_file: UploadFile = File(...)) -> UploadedTextsResults:
+@app.post("/predict")
+def predict(upload_file: UploadFile = File(...)) -> UploadedTextsResults:
     start_t = time()
     try:
         df = input_file_to_df(upload_file.file, upload_file.filename)
