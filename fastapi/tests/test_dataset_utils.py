@@ -170,7 +170,7 @@ def test_add_lemmas_column(n_jobs):
 def test_add_lemmas_column_warning():
     warnings.filterwarnings("error")
     df = make_df()
-    df.iloc[0].text = "english"
+    df.iloc[0, 1] = "english"
     with pytest.raises(UserWarning):
         u.add_lemmas_column(df, inplace=True)
     warnings.filterwarnings("default")

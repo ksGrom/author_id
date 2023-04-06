@@ -24,16 +24,6 @@ def check_work_titles_uniqueness(df: pd.DataFrame, raise_exception=True):
         return max_unique_n <= 1
 
 
-def _fit_predict_for_pool(clf_train_test: tuple):
-    """Вспомогательная функция для распараллеливания
-    кросс-валидации.
-    """
-    clf, X_train, X_test, y_train, y_test = clf_train_test
-    clf.fit(X_train, y_train)
-    y_pred_test = pd.Series(clf.predict(X_test), index=y_test.index)
-    return clf, y_pred_test
-
-
 class CustomTfidfVectorizer:
     """Кастомный класс для получения tf-idf-матрицы из датафрейма
     с текстами и их лемматизированными версиями. Включает в себя
@@ -63,6 +53,7 @@ class CustomTfidfVectorizer:
 
     def __fit_transform(self, X, method_name):
         X_text, X_lemmas = self.__get_text_and_lemmas_series(X)
+        X_text = X_text.apply(self.__replace_punctuation_marks)
         X_text_res = getattr(self.char_tfidf_vectorizer, method_name)(X_text)
         X_lemmas_res = getattr(self.lemma_tfidf_vectorizer, method_name)(X_lemmas)
         return X_text_res, X_lemmas_res
