@@ -3,6 +3,7 @@ from pymorphy2 import MorphAnalyzer
 from collections import namedtuple
 from nltk.corpus import stopwords
 from multiprocessing import Pool
+from pathlib import Path
 from tqdm import tqdm
 import pandas as pd
 import warnings
@@ -58,34 +59,36 @@ def df_from_txt_files(dataset_name, dir_path="./texts"):
         os.path.join(dir_path, f'{dataset_name}/**/*.txt'),
         recursive=True
     )
+    file_paths = list(map(Path, file_paths))
 
     if len(file_paths) == 0:
         raise FileNotFoundError("No files found!")
 
     # Находим файлы с информацией о каждом авторе
-    # (AUTHOR.txt, сейчас там только фамилия на русском)
+    # (AUTHOR.txt, содержание: "surname:[фамилия на русском]")
     author_info_paths = glob.glob(
         os.path.join(dir_path, f'{dataset_name}/**/AUTHOR.txt'),
         recursive=True
     )
+    author_info_paths = list(map(Path, author_info_paths))
 
     # Создаем словарь "автор" (название папки) - "фамилия"
     # (из файла AUTHOR.txt в этой папке)
     author__rus_surname__dict = dict()
     for path in author_info_paths:
         with open(path, 'r', encoding='utf-8') as f:
-            author__rus_surname__dict[path.split("\\")[-2]] \
+            author__rus_surname__dict[path.parts[-2]] \
                 = f.readline().split(':')[-1]
 
     # Создаем словарь "название произведения" (по названию файла) - "путь к файлу"
-    title_path_dict = {path.split("\\")[-1].split(".")[0]
+    title_path_dict = {path.parts[-1].split(".")[0]
                        : path for path in file_paths}
-    if 'AUTHOR' not in author__rus_surname__dict:
+    if 'AUTHOR' not in title_path_dict:
         raise FileNotFoundError("Each folder must contain `AUTHOR.txt` file.")
     del title_path_dict['AUTHOR']
     # Создаем словарь "название произведения" - "автор"
-    title_author_dict = {path.split("\\")[-1].split(".")[0]
-                         : path.split("\\")[-2] for path in file_paths}
+    title_author_dict = {path.parts[-1].split(".")[0]
+                         : path.parts[-2] for path in file_paths}
     del title_author_dict['AUTHOR']
 
     # Создаем датафрейм и сохраняем
@@ -155,7 +158,7 @@ def excerpt_generator(text, excerpt_len, offset_n_words='excerpt_len'):
     while not stop:
         excerpt = ''
         for sentence in sentence_generator(text, offset):
-            excerpt += (' ' + sentence)
+            excerpt += ' ' + sentence
             if len(excerpt.split()) >= excerpt_len:
                 yield excerpt.strip()
                 break

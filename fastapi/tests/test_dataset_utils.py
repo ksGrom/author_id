@@ -2,7 +2,6 @@ import dataset_utils as u
 import pytest
 import os
 from pathlib import Path
-import random
 import pandas as pd
 import warnings
 
@@ -14,16 +13,10 @@ def new_dir(path):
     return path
 
 
-def random_text(length):
-    letters = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
-    letters += letters.upper() + "1234567890,!?.—-" + 30 * " "
-    return ''.join(random.choice(letters) for _ in range(length))
-
-
-def new_file(path):
+def new_file(path, text):
     path = Path(path)
     with open(path, 'a') as f:
-        f.write(random_text(random.randint(10**3, 10**4)))
+        f.write(text)
     return path
 
 
@@ -49,22 +42,24 @@ def make_lemmas_series():
 
 @pytest.fixture(scope="session")
 def tmp_folder(tmp_path_factory):
+    texts = make_df().text.tolist()
     tmp = tmp_path_factory.mktemp(".test_tmp")
     new_dir(os.path.join(tmp, 'texts'))
 
     new_dir(os.path.join(tmp, 'texts/TRAIN'))
     new_dir(os.path.join(tmp, 'texts/TRAIN/AUTHOR_1'))
-    new_file(os.path.join(tmp, 'texts/TRAIN/AUTHOR_1/story.txt'))
-    new_file(os.path.join(tmp, 'texts/TRAIN/AUTHOR_1/short_story.txt'))
+    new_file(os.path.join(tmp, 'texts/TRAIN/AUTHOR_1/AUTHOR.txt'), 'surname:Автор_1')
+    new_file(os.path.join(tmp, 'texts/TRAIN/AUTHOR_1/story.txt'), texts[0])
+    new_file(os.path.join(tmp, 'texts/TRAIN/AUTHOR_1/short_story.txt'), texts[1])
     new_dir(os.path.join(tmp, 'texts/TRAIN/AUTHOR_2'))
-    new_file(os.path.join(tmp, 'texts/TRAIN/AUTHOR_2/novella.txt'))
+    new_file(os.path.join(tmp, 'texts/TRAIN/AUTHOR_2/AUTHOR.txt'), 'surname:Автор_2')
+    new_file(os.path.join(tmp, 'texts/TRAIN/AUTHOR_2/novella.txt'), texts[2])
 
     new_dir(os.path.join(tmp, 'texts/TEST'))
     new_dir(os.path.join(tmp, 'texts/TEST/AUTHOR_1'))
-    new_file(os.path.join(tmp, 'texts/TEST/AUTHOR_1/novel.txt'))
+    new_file(os.path.join(tmp, 'texts/TEST/AUTHOR_1/test1.txt'), texts[3])
     new_dir(os.path.join(tmp, 'texts/TEST/AUTHOR_2'))
-    new_file(os.path.join(tmp, 'texts/TEST/AUTHOR_2/tale.txt'))
-    new_file(os.path.join(tmp, 'texts/TEST/AUTHOR_2/poem.txt'))
+    new_file(os.path.join(tmp, 'texts/TEST/AUTHOR_2/test2.txt'), texts[4])
     return tmp
 
 
@@ -79,8 +74,12 @@ def test__replace_punctuation_marks(orig, res):
     assert res == u._replace_punctuation_marks(orig)
 
 
-def test_df_from_txt_files():
-    pass
+def test_df_from_txt_files(tmp_folder):
+    df = u.df_from_txt_files("TRAIN", dir_path=os.path.join(tmp_folder, 'texts'))
+    assert (3, 4) == df.shape
+    assert ["AUTHOR_1", "AUTHOR_2"] == df.author.unique().tolist()
+    assert ["Автор_1", "Автор_2"] == df.author_surname.unique().tolist()
+    assert ["story", "short_story", "novella"] == df.work_title.unique().tolist()
 
 
 def test_df_from_txt_files_empty(tmp_folder):
@@ -89,7 +88,52 @@ def test_df_from_txt_files_empty(tmp_folder):
             "AAA", dir_path=os.path.join(tmp_folder, 'texts'))
     with pytest.raises(FileNotFoundError):
         u.df_from_txt_files(
-            "TRAIN", dir_path=os.path.join(tmp_folder, 'texts'))
+            "TEST", dir_path=os.path.join(tmp_folder, 'texts'))
+    new_file(os.path.join(
+        tmp_folder, 'texts/TEST/AUTHOR_1/AUTHOR.txt'), 'surname:Автор_1')
+    with pytest.raises(FileNotFoundError):
+        u.df_from_txt_files(
+            "TEST", dir_path=os.path.join(tmp_folder, 'texts'))
+
+
+def test_sentence_generator():
+    sentences = [
+        "\nЭто предложение номер один.    ", "А это — номер два!",
+        "Есть еще третье предложение...", "И четвертое?"
+    ]
+    text = ' '.join(sentences)
+    i = 0
+    for sentence in u.sentence_generator(text):
+        assert sentences[i].strip() == sentence
+        i += 1
+    pos = next(u.sentence_generator(text, yield_pos=True))
+    assert "Это предложение номер один.     " == text[pos[0]:pos[1]]
+
+
+def test_excerpt_generator():
+    text = "Раз. Два. Три, четыре, пять. Шесть! " \
+           "Семь, восемь, девять. Десять."
+    excerpt_list_1 = list(u.excerpt_generator(text, 4))
+    assert 2 == len(excerpt_list_1)
+    assert "Раз. Два. Три, четыре, пять." == excerpt_list_1[0]
+    assert "Шесть! Семь, восемь, девять." == excerpt_list_1[1]
+
+    excerpt_list_2 = list(u.excerpt_generator(text, 3, offset_n_words=1))
+    assert 5 == len(excerpt_list_2)
+    assert [
+               "Раз. Два. Три, четыре, пять.", "Два. Три, четыре, пять.",
+               "Три, четыре, пять.", "Шесть! Семь, восемь, девять.",
+               "Семь, восемь, девять."
+           ] == excerpt_list_2
+
+
+def test_make_dataset_of_excerpts():
+    text = "Раз. Два. Три, четыре, пять. Шесть! " \
+           "Семь, восемь, девять. Десять."
+    df = pd.DataFrame([{'text': text}])
+    res_df = u.make_dataset_of_excerpts(
+        df, excerpt_num_of_words=3, offset=1)
+    assert "Шесть! Семь, восемь, девять." == res_df.iloc[3].text
 
 
 @pytest.mark.parametrize(
