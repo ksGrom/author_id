@@ -77,9 +77,9 @@ def test__replace_punctuation_marks(orig, res):
 def test_df_from_txt_files(tmp_folder):
     df = u.df_from_txt_files("TRAIN", dir_path=os.path.join(tmp_folder, 'texts'))
     assert (3, 4) == df.shape
-    assert ["AUTHOR_1", "AUTHOR_2"] == df.author.unique().tolist()
-    assert ["Автор_1", "Автор_2"] == df.author_surname.unique().tolist()
-    assert ["story", "short_story", "novella"] == df.work_title.unique().tolist()
+    assert {"AUTHOR_1", "AUTHOR_2"} == set(df.author.unique().tolist())
+    assert {"Автор_1", "Автор_2"} == set(df.author_surname.unique().tolist())
+    assert {"story", "short_story", "novella"} == set(df.work_title.unique().tolist())
 
 
 def test_df_from_txt_files_empty(tmp_folder):
@@ -186,7 +186,7 @@ def test_undersampling():
 def test_df_leave_authors():
     df = u.df_leave_authors(make_df(), ["first", "third"])
     assert (3, 2) == df.shape
-    assert ["first", "third"] == df.author.unique().tolist()
+    assert {"first", "third"} == set(df.author.unique().tolist())
 
 
 @pytest.mark.parametrize(
