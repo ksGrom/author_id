@@ -1,7 +1,7 @@
 from argparse import ArgumentParser
 import joblib
 import nltk
-from dataset_utils import (
+from utils_dataset import (
     input_file_to_df, 
     add_lemmas_column
 )
