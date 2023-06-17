@@ -1,7 +1,5 @@
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import SGDClassifier
-from sklearn.pipeline import Pipeline
-from scipy import stats
 import pandas as pd
 import numpy as np
 
@@ -37,23 +35,24 @@ class CustomTfidfVectorizer:
 
         self.char_tfidf_vectorizer = TfidfVectorizer(**self.char_tfidf_params)
 
-    def fit(self, X, y=None):
-        self.__fit_transform(X, 'fit')
+    def fit(self, X, y=None,  *, preprocessing=True):
+        self.__fit_transform(X, 'fit', preprocessing)
         return self
 
-    def transform(self, X, y=None):
-        return self.__fit_transform(X, 'transform')
+    def transform(self, X, y=None,  *, preprocessing=True):
+        return self.__fit_transform(X, 'transform', preprocessing)
 
-    def fit_transform(self, X, y=None):
-        return self.__fit_transform(X, 'fit_transform')
+    def fit_transform(self, X, y=None, *, preprocessing=True):
+        return self.__fit_transform(X, 'fit_transform', preprocessing)
 
-    def __fit_transform(self, X, method_name):
-        X_text = self.__get_text_and_lemmas_series(X)
-        X_text = X_text.apply(self.__text_preprocessing)
+    def __fit_transform(self, X, method_name, preprocessing):
+        X_text = self.__get_text_series(X)
+        if preprocessing:
+            X_text = X_text.apply(self.__text_preprocessing)
         X_text_res = getattr(self.char_tfidf_vectorizer, method_name)(X_text)
         return X_text_res
 
-    def __get_text_and_lemmas_series(self, df):
+    def __get_text_series(self, df):
         if not (type(df) is pd.DataFrame
                 and hasattr(df, 'text')):
             err = "X must be pandas.DataFrame with `text` column!"
@@ -102,20 +101,18 @@ class AuthorIdTfidfPipeline:
 
         self.sgd_classifier_args = kwargs.get('sgd_classifier_args')
 
-        estimators = [
-            ("tfidf", CustomTfidfVectorizer(**kwargs)),
-            ("clf", SGDClassifier(**self.sgd_classifier_args))
-        ]
-        self.pipeline = Pipeline(estimators)
+        self.vectorizer = CustomTfidfVectorizer(**kwargs)
+        self.classifier = SGDClassifier(**kwargs.get('sgd_classifier_args'))
 
-    def fit(self, X, y=None, verbose=0):
+    def fit(self, X, y=None, *, preprocessing=True, verbose=0):
         if y is None:
             X, y = X.drop('author', axis=1), X.author
         check_work_titles_uniqueness(pd.concat([X, y], axis=1))
-        self.pipeline.fit(X, y)
+        X = self.vectorizer.fit_transform(X, preprocessing=preprocessing)
+        self.classifier.fit(X, y)
         return self
 
-    def predict(self, X):
+    def predict(self, X, *, preprocessing=True):
         predictions = []
         X = ds.make_dataset_of_excerpts(
             df=X,
@@ -125,13 +122,13 @@ class AuthorIdTfidfPipeline:
             X_single_text_excerpts = X[X.text_id == text_id]
             if X_single_text_excerpts.shape[0] > 20:
                 X_single_text_excerpts = X_single_text_excerpts.sample(20)
+            X_single_text_excerpts = self.vectorizer.transform(
+                X_single_text_excerpts, preprocessing=preprocessing)
             predictions.append(
-                pd.Series(self.pipeline.predict(X_single_text_excerpts)).mode().tolist()[0]
+                pd.Series(self.classifier.predict(X_single_text_excerpts))
+                .mode().tolist()[0]
             )
         return np.array(predictions)
-
-    def predict_proba(self, X):
-        return self.pipeline.predict_proba(X)
 
     @property
     def sgd_classifier_args(self):

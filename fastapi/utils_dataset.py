@@ -25,7 +25,7 @@ morph = MorphAnalyzer()
 def text_preprocessing(
         text: str,
         lower=True,
-        patterns=r'[^а-яa-z.?!…,:;—()\"\'\- ]+'
+        patterns=r'[^а-я.?!…,:;—()\"\'\- ]+'
 ):
     """Предварительная обработка текста, включающая замену некоторых
     знаков препинания (напр., трех точек на символ многоточия),
@@ -117,7 +117,7 @@ def df_from_txt_files(dataset_name, dir_path="./texts"):
         dataset_list.append({
             'author': author,
             'author_surname': author__rus_surname__dict[author],
-            'work_title': title,
+            'text_title': title,
             'text': text
         })
     df_raw = pd.DataFrame(dataset_list)
@@ -190,8 +190,6 @@ def excerpt_generator(text, excerpt_len, offset_n_words='excerpt_len'):
             cum_sum = 0
         else:
             i += 1
-    if cum_sum <= excerpt_len:
-        yield text
 
 
 def _open_tqdm(verbose, total):
@@ -240,16 +238,15 @@ def make_dataset_of_excerpts(df, excerpt_num_of_words=250,
         excerpts = list(
             excerpt_generator(row['text'], excerpt_num_of_words, offset)
         )
-        for key in ['author', 'author_surname', 'work_title']:
+        for key in ['author', 'text_title']:
             if key not in row:
                 row[key] = ''
         for i in range(len(excerpts)):
             excerpt = excerpts[i]
             dataset_list.append({
                 'author': row['author'],
-                'author_surname': row['author_surname'],
-                'work_title': row['work_title'],
-                'text_id': index,
+                'text_title': row['text_title'],
+                'orig_text_id': index,
                 'excerpt_num': i,
                 'text': excerpt
             })
@@ -333,7 +330,7 @@ def df_leave_authors(df: pd.DataFrame, authors: list):
     return df[mask].copy(deep=True)
 
 
-def input_file_to_df(file, filename=None):
+def input_file_to_df(file, filename=None, ext=None):
     """Создает `pandas.DataFrame` из входного файла `file`.
 
     Parameters
@@ -347,6 +344,11 @@ def input_file_to_df(file, filename=None):
         у `file` нет атрибута `name`. Используется только для
         проверки расширения.
 
+    ext : str or None
+        Допустимое расширение входного файла.
+        Возможные значения: `csv`, `txt` и `None`.
+        Если `None`, то допустимы csv и txt.
+
     Returns
     -------
     df : pd.DataFrame
@@ -359,12 +361,12 @@ def input_file_to_df(file, filename=None):
     if filename is None:
         filename = file.name
     file_ext = str(filename).split(".")[-1]
-    if file_ext == 'csv':
-        df = pd.read_csv(file)
+    if file_ext == 'csv' and ext in ['csv', None]:
+        df = pd.read_csv(file, index_col=False)
         if 'text' not in df.columns:
             raise ValueError("no `text` column in input file")
-    elif file_ext == 'txt':
+    elif file_ext == 'txt' and ext in ['txt', None]:
         df = pd.DataFrame([[file.read().decode('utf-8')]], columns=['text'])
     else:
-        raise ValueError(f"invalid extension ({file_ext}), must be txt or csv")
+        raise ValueError(f"invalid extension ({file_ext})")
     return df
