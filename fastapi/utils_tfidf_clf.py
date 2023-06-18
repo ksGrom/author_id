@@ -60,7 +60,7 @@ class CustomTfidfVectorizer:
 
     @patterns.setter
     def patterns(self, value):
-        self.__patterns = r'[^а-я.?!…,:;—()\"\'\- ]+' \
+        self.__patterns = r'[^а-яa-z.?!…,:;—()\"\'\- ]+' \
             if value is None else value
 
     @property
@@ -73,7 +73,7 @@ class CustomTfidfVectorizer:
             'analyzer': 'char',
             'ngram_range': (1, 4),
             'sublinear_tf': True,
-            'max_features': 5000,
+            'max_features': 30000,
         }
         if type(value) is dict:
             self.__char_tfidf_params.update(value)
@@ -108,12 +108,11 @@ class AuthorIdTfidfPipeline:
 
     def predict(self, X, *, preprocessing=True, logger=empty_logger):
         predictions = []
-        if preprocessing:
-            logger("PREPROCESSING")
-            X = ds.make_dataset_of_excerpts(
-                df=X,
-                excerpt_num_of_words=EXCERPT_LEN
-            )
+        logger("PREPROCESSING")
+        X = ds.make_dataset_of_excerpts(
+            df=X,
+            excerpt_num_of_words=EXCERPT_LEN
+        )
         logger("PREDICTING")
         for orig_text_id in X.orig_text_id.unique():
             X_single_text_excerpts = X[X.orig_text_id == orig_text_id]

@@ -148,8 +148,8 @@ class Test(Base):
     dataset_id: Mapped[int] = mapped_column(
         ForeignKey('dataset.id', ondelete='RESTRICT'), nullable=False)
     dataset_version: Mapped[int]
-    y_true: Mapped[Optional[str]] = mapped_column(Text)
-    y_pred: Mapped[Optional[str]] = mapped_column(Text)
+    # y_true: Mapped[Optional[str]] = mapped_column(Text)
+    # y_pred: Mapped[Optional[str]] = mapped_column(Text)
     f1_score: Mapped[Optional[float]]
     status: Mapped[fit_predict_status]
     created_at: Mapped[timestamp]

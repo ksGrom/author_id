@@ -168,7 +168,7 @@ async def update_author_info(
     return crud.update_author(db, author.id, first_name, surname, patronymic)
 
 
-@app.get('/train/{train_id}', tags=["Train"])
+@app.get('/train/{training_id}', tags=["Train"])
 async def get_training_by_id(
         training_id: int,
         db: Session = Depends(get_db)
@@ -278,6 +278,9 @@ async def predict(
         db: Session = Depends(get_db)
 ) -> PredictionResults:
     start_t = time()
+    model = crud.get_ml_model_by_id(db, model_id)
+    if model is None:
+        raise HTTPException(status_code=404)
     try:
         df = ds.input_file_to_df(upload_file.file, upload_file.filename)
     except ValueError as err:
@@ -285,7 +288,6 @@ async def predict(
     if crud.get_last_training(db, model_id).status != 'FINISHED':
         raise HTTPException(status_code=422,
                             detail="Model is training at the moment!")
-    model = crud.get_ml_model_by_id(db, model_id)
     clf = joblib.load(model.file)
     predictions = clf.predict(df).tolist()
     return PredictionResults(
@@ -324,7 +326,7 @@ async def delete_model(
 async def get_model_list(
         model_name: str | None = None,
         db: Session = Depends(get_db)
-) -> List[MLModel]:
+) -> List[MLModelForTraining]:
     """Если передается параметр `model_name`, то в ответе
     содержится краткая информация о модели с указанным именем.
     В противном случае в ответе содержится список всех сохраненных
