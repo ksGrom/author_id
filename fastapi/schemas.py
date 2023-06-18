@@ -12,6 +12,8 @@ tags_metadata = [
     {"name": "Train", "description": "Обучение ML-моделей."},
     {"name": "Test", "description": "Оценка качества ML-моделей."},
     {"name": "Predict", "description": "Применение ML-моделей."},
+    {"name": "Model", "description":
+        "Информация об ML-моделях. Удаление ML-моделей."},
     {"name": "Tools", "description":
         "Инструменты для формирования датасетов."},
     {"name": "Status", "description": "Проверка доступности сервиса."},
@@ -21,7 +23,7 @@ tags_metadata = [
 class PredictionResults(BaseModel):
     n_texts: int
     predictions: List[Union[int, str]]
-    exec_time: float
+    elapsed_time: float
 
 
 class TrainResults(BaseModel):
@@ -49,10 +51,17 @@ class DatasetAuthor(BaseModel):
         orm_mode = True
 
 
+class DatasetId(BaseModel):
+    id: int
+
+    class Config:
+        orm_mode = True
+
+
 class Dataset(BaseModel):
     id: int
     name: str
-    description: str
+    description: str | None
     created_at: datetime
     n_authors: int
     n_texts: int
@@ -62,28 +71,10 @@ class Dataset(BaseModel):
 
     class Config:
         orm_mode = True
-    # training: Mapped[List["Training"]] \
-    #     = relationship(back_populates="dataset")
-    # tests: Mapped[List["Test"]] = relationship(back_populates="dataset")
-
-
-class DatasetBriefly(BaseModel):
-    id: int
-    name: str
-    description: str | None
-    created_at: datetime
-    n_authors: int
-    n_texts: int
-    n_samples: int
-    # training:
-    # tests:
-
-    class Config:
-        orm_mode = True
 
 
 class AuthorDataset(BaseModel):
-    dataset: DatasetBriefly
+    dataset: Dataset
     n_texts: int
     n_samples: int
 
@@ -93,3 +84,102 @@ class AuthorDataset(BaseModel):
 
 class AuthorDetailed(Author):
     datasets: List[AuthorDataset]
+
+
+class TestForDataset(BaseModel):
+    id: int
+    dataset_version: int
+    f1_score: float | None
+    created_at: datetime
+    last_update: datetime
+    elapsed_time: float | None
+    status: str
+
+    class Config:
+        orm_mode = True
+
+
+class TestShort(TestForDataset):
+    dataset: DatasetId
+
+
+class Test(TestForDataset):
+    dataset: Dataset
+
+
+class TrainingForMLModel(BaseModel):
+    id: int
+    status: str
+    created_at: datetime
+    last_update: datetime
+    elapsed_time: float | None
+    dataset: Dataset
+    dataset_version: int
+    tests: List[Test]
+
+    class Config:
+        orm_mode = True
+
+
+class MLModelId(BaseModel):
+    id: int
+
+    class Config:
+        orm_mode = True
+
+
+class MLModelForTraining(BaseModel):
+    id: int
+    name: str
+    description: str | None
+    created_at: datetime
+
+    class Config:
+        orm_mode = True
+
+
+class MLModel(MLModelForTraining):
+    training: List[TrainingForMLModel]
+
+
+class Training(TrainingForMLModel):
+    ml_model: MLModelForTraining
+
+
+class TrainingShort(BaseModel):
+    id: int
+    status: str
+    created_at: datetime
+    last_update: datetime
+    elapsed_time: float | None
+    dataset: DatasetId
+    ml_model: MLModelId
+    dataset_version: int
+
+    class Config:
+        orm_mode = True
+
+
+class TrainingForDataset(BaseModel):
+    id: int
+    status: str
+    created_at: datetime
+    last_update: datetime
+    elapsed_time: float | None
+    ml_model: MLModelForTraining
+    dataset_version: int
+
+    class Config:
+        orm_mode = True
+
+
+class DatasetDetailed(Dataset):
+    training: List[TrainingForDataset]
+    tests: List[TestForDataset]
+
+    class Config:
+        orm_mode = True
+
+
+class TestDetailed(Test):
+    training: TrainingForDataset

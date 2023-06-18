@@ -31,9 +31,9 @@ unique_name = Annotated[
     str, mapped_column(String(30), nullable=False, unique=True)]
 str_50 = Annotated[str, mapped_column(String(50))]
 str_100 = Annotated[str, mapped_column(String(100))]
-training_status = Literal[
+fit_predict_status = Literal[
     "NOT STARTED", "PREPROCESSING", "FEATURE EXTRACTION",
-    "TRAINING", "FINISHED"
+    "TRAINING", "PREDICTING", "FINISHED"
 ]
 
 
@@ -48,7 +48,7 @@ class MLModel(Base):
 
     id: Mapped[intpk]
     name: Mapped[unique_name]
-    description: Mapped[str] = mapped_column(Text)
+    description: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[timestamp]
     file: Mapped[Optional[str_100]]
 
@@ -127,9 +127,10 @@ class Training(Base):
     dataset_id: Mapped[int] = mapped_column(
         ForeignKey('dataset.id', ondelete='RESTRICT'), nullable=False)
     dataset_version: Mapped[int] = mapped_column(nullable=False)
-    status: Mapped[training_status]
+    status: Mapped[fit_predict_status]
     created_at: Mapped[timestamp]
     last_update: Mapped[timestamp]
+    elapsed_time: Mapped[Optional[float]]
 
     ml_model: Mapped["MLModel"] = relationship(back_populates="training")
     dataset: Mapped["Dataset"] = relationship(back_populates="training")
@@ -147,10 +148,13 @@ class Test(Base):
     dataset_id: Mapped[int] = mapped_column(
         ForeignKey('dataset.id', ondelete='RESTRICT'), nullable=False)
     dataset_version: Mapped[int]
-    y_true: Mapped[str] = mapped_column(Text)
-    y_pred: Mapped[str] = mapped_column(Text)
-    f1_score: Mapped[float]
+    y_true: Mapped[Optional[str]] = mapped_column(Text)
+    y_pred: Mapped[Optional[str]] = mapped_column(Text)
+    f1_score: Mapped[Optional[float]]
+    status: Mapped[fit_predict_status]
     created_at: Mapped[timestamp]
+    last_update: Mapped[timestamp]
+    elapsed_time: Mapped[Optional[float]]
 
     training: Mapped["Training"] = relationship(back_populates="tests")
     dataset: Mapped["Dataset"] = relationship(back_populates="tests")

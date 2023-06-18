@@ -6,19 +6,7 @@ import numpy as np
 import utils_dataset as ds
 
 EXCERPT_LEN = 250
-
-
-def check_work_titles_uniqueness(df: pd.DataFrame, raise_exception=True):
-    """Проверяет наличие в датасете неуникальных названий
-    произведений: если есть два автора с одноименными произведениями,
-    возвращает `False` или поднимает `ValueError` (в зависимости от
-    аргумента `raise_exception`).
-    """
-    max_unique_n = df.groupby('work_title')['author'].describe().unique.max()
-    if raise_exception and max_unique_n > 1:
-        raise ValueError(f"Must be one author per title!")
-    else:
-        return max_unique_n <= 1
+def empty_logger(x): return
 
 
 class CustomTfidfVectorizer:
@@ -102,24 +90,33 @@ class AuthorIdTfidfPipeline:
         self.sgd_classifier_args = kwargs.get('sgd_classifier_args')
 
         self.vectorizer = CustomTfidfVectorizer(**kwargs)
-        self.classifier = SGDClassifier(**kwargs.get('sgd_classifier_args'))
+        self.classifier = SGDClassifier(**self.sgd_classifier_args)
+        self.__n_fit = 0  # количество вызовов `fit`
 
-    def fit(self, X, y=None, *, preprocessing=True, verbose=0):
+    def fit(self, X, y=None, *, preprocessing=True, logger=empty_logger):
         if y is None:
             X, y = X.drop('author', axis=1), X.author
-        check_work_titles_uniqueness(pd.concat([X, y], axis=1))
-        X = self.vectorizer.fit_transform(X, preprocessing=preprocessing)
+        logger("FEATURE EXTRACTION")
+        if self.__n_fit == 0:
+            X = self.vectorizer.fit_transform(X, preprocessing=preprocessing)
+        else:
+            X = self.vectorizer.transform(X, preprocessing=preprocessing)
+        logger("TRAINING")
         self.classifier.fit(X, y)
+        self.__n_fit += 1
         return self
 
-    def predict(self, X, *, preprocessing=True):
+    def predict(self, X, *, preprocessing=True, logger=empty_logger):
         predictions = []
-        X = ds.make_dataset_of_excerpts(
-            df=X,
-            excerpt_num_of_words=EXCERPT_LEN
-        )
-        for text_id in X.text_id.unique():
-            X_single_text_excerpts = X[X.text_id == text_id]
+        if preprocessing:
+            logger("PREPROCESSING")
+            X = ds.make_dataset_of_excerpts(
+                df=X,
+                excerpt_num_of_words=EXCERPT_LEN
+            )
+        logger("PREDICTING")
+        for orig_text_id in X.orig_text_id.unique():
+            X_single_text_excerpts = X[X.orig_text_id == orig_text_id]
             if X_single_text_excerpts.shape[0] > 20:
                 X_single_text_excerpts = X_single_text_excerpts.sample(20)
             X_single_text_excerpts = self.vectorizer.transform(
@@ -141,7 +138,8 @@ class AuthorIdTfidfPipeline:
             'max_iter': 5000,
             'verbose': 0,
             'n_jobs': -1,
-            'loss': 'modified_huber'
+            'loss': 'modified_huber',
+            'warm_start': True
         }
         if type(value) is dict:
             self.__sgd_args.update(value)

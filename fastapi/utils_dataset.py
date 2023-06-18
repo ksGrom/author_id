@@ -45,8 +45,9 @@ def text_preprocessing(
         text = text.lower()
     for key, val in replacements.items():
         text = text.replace(key, val)
-    text = " ".join(text.split())  # убираем лишние пробелы
     text = re.sub(patterns, '', text)
+    text = " ".join(text.split())  # убираем лишние пробелы
+    text = text.strip()
     return text
 
 

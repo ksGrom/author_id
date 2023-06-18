@@ -14,12 +14,16 @@ def __mkdir(path):
 
 
 def save_model_file(clf, filename, dir_path="./ml_models"):
-    """Сохраняет модель в указанный файл (pickle).
-    """
+    """Сохраняет модель в указанный файл (pickle)."""
     __mkdir(dir_path)
     path = Path(dir_path, filename)
     joblib.dump(clf, path)
     return path
+
+
+def load_model(file_path: str):
+    """Загрузка модели из pickle-файла."""
+    return joblib.load(Path(file_path))
 
 
 def save_dataset_file(df: pd.DataFrame, filename: str, dir_path="./datasets"):

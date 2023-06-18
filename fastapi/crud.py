@@ -5,8 +5,8 @@ import pandas as pd
 import re
 
 from db import (
-    session_factory, MLModel, Dataset, Author,
-    AuthorDatasetMapping,
+    MLModel, Dataset, Author,
+    AuthorDatasetMapping, Training, Test
 )
 from sqlalchemy import select, and_
 from fastapi import UploadFile
@@ -15,6 +15,10 @@ from typing import Type, Any
 import utils_dataset as utd
 import utils_files as uf
 from db import Base
+from time import time
+import utils_tfidf_clf as u
+from datetime import datetime
+from sklearn.metrics import f1_score
 
 
 def add_entity(db: Session, entity_class: Type[Base], **kwargs):
@@ -109,6 +113,7 @@ def __process_uploaded_dataset_file(upload_file: UploadFile):
     df = df[['text', 'author']]
     df.text = df.text.apply(utd.text_preprocessing)
     df = utd.make_dataset_of_excerpts(df)
+    df.text = df.text.apply(lambda x: x.strip())
     return df
 
 
@@ -150,7 +155,8 @@ def add_texts_to_dataset(
     df.to_csv(dataset.file)
     dataset = update_entity(
         db, Dataset, dataset.id, n_authors=df.author.unique().shape[0],
-        n_texts=df.orig_text_id.unique().shape[0], n_samples=df.shape[0]
+        n_texts=df.orig_text_id.unique().shape[0], n_samples=df.shape[0],
+        version=dataset.version+1
     )
     add_author_dataset_entities(db, dataset.id, df)
     return dataset
@@ -243,3 +249,165 @@ def add_author_dataset_entities(
                 db, AuthorDatasetMapping, query[0].id,
                 n_texts=n_texts, n_samples=n_samples
             )
+
+
+def create_training(db: Session, model: MLModel, dataset: Dataset):
+    return add_entity(
+        db, Training, ml_model_id=model.id, dataset_id=dataset.id,
+        dataset_version=dataset.version, status="NOT STARTED",
+        last_update=datetime.now()
+    )
+
+
+def update_training(db: Session, training: Training,
+                    status: str, **kwargs):
+    return update_entity(
+        db, Training, training.id,
+        status=status, last_update=datetime.now(), **kwargs
+    )
+
+
+def __training_db_update_status_func(db: Session, training: Training):
+    """Возвращает функцию, которая обновляет статус обучения
+    в БД (эта функция передается методу `fit` классификатора)."""
+    def func(status: str):
+        update_training(db, training, status)
+    return func
+
+
+def __test_db_update_status_func(db: Session, test: Test):
+    """Возвращает функцию, которая обновляет статус тестирования
+    в БД (эта функция передается методу `predict` классификатора)."""
+    def func(status: str):
+        update_test(db, test, status)
+    return func
+
+
+def update_ml_model(db: Session, ml_model: MLModel, **kwargs):
+    return update_entity(db, MLModel, ml_model.id, **kwargs)
+
+
+def train_model(
+        db: Session,
+        ml_model: MLModel,
+        dataset: Dataset,
+        clf: u.AuthorIdTfidfPipeline | None = None
+):
+    """Обучение ML-модели."""
+    start_t = time()
+    training = create_training(db, ml_model, dataset)
+    df = pd.read_csv(dataset.file)
+    status_update_func = __training_db_update_status_func(db, training)
+    if clf is None:
+        clf = u.AuthorIdTfidfPipeline()
+    clf.fit(df, preprocessing=False, logger=status_update_func)
+    file_path = uf.save_model_file(clf, f"{ml_model.name}.pkl")
+    update_training(db, training, status="FINISHED",
+                    elapsed_time=time()-start_t)
+    update_ml_model(db, ml_model, file=str(file_path))
+
+
+def get_last_training(db: Session, ml_model_id: int):
+    query = db.execute(select(Training).where(
+        Training.ml_model_id == ml_model_id
+    ).order_by(Training.dataset_version.desc())).first()
+    if query is None or len(query) == 0:
+        return None
+    return query[0]
+
+
+def continue_training(db: Session, ml_model: MLModel, dataset: Dataset):
+    """Дообучение ML-модели на обновленном датасете."""
+    clf = uf.load_model(ml_model.file)
+    train_model(db, ml_model, dataset, clf)
+
+
+def create_test(db: Session, training_id: int, dataset: Dataset):
+    return add_entity(
+        db, Test, training_id=training_id, dataset_id=dataset.id,
+        dataset_version=dataset.version, status="NOT STARTED",
+        last_update=datetime.now()
+    )
+
+
+def update_test(db: Session, test: Test,
+                status: str, **kwargs):
+    return update_entity(
+        db, Test, test.id,
+        status=status, last_update=datetime.now(), **kwargs
+    )
+
+
+def test_model(
+        db: Session,
+        ml_model: MLModel,
+        last_training: Training,
+        dataset: Dataset,
+):
+    start_t = time()
+    test = create_test(db, last_training.id, dataset)
+    df = pd.read_csv(dataset.file)
+    status_update_func = __test_db_update_status_func(db, test)
+    clf = uf.load_model(ml_model.file)
+    y_pred = pd.Series(
+        clf.predict(df, preprocessing=False, logger=status_update_func)
+    )
+    y_true = df.author
+    f1 = f1_score(y_true, y_pred, average='weighted')
+    update_test(
+        db, test, status="FINISHED",
+        f1_score=f1,
+        y_true=y_true.to_csv(index=False),
+        y_pred=y_pred.to_csv(index=False),
+        elapsed_time=time() - start_t
+    )
+
+
+def get_ml_model_by_name(db: Session, model_name: str):
+    """Получает ML-модель по имени."""
+    return get_entity(db, MLModel, 'name', model_name)
+
+
+def get_ml_model_by_id(db: Session, model_id: int):
+    """Получает ML-модель по id."""
+    return get_entity(db, MLModel, 'id', model_id)
+
+
+def create_ml_model(db: Session, model_name: str, description: str | None):
+    if not check_slug_field(model_name, max_len=25):
+        raise ValueError("Invalid model name! (Max length: 25. "
+                         "Must match regex `[a-zA-Z0-9_-]+$`)")
+    return add_entity(
+        db, MLModel, name=model_name, description=description
+    )
+
+
+def delete_ml_model(db: Session, ml_model: MLModel):
+    """Удаляет ML-модель с указанным id."""
+    uf.delete_file(ml_model.file)
+    return delete_entity(db, MLModel, 'id', ml_model.id)
+
+
+def get_all_ml_models(db: Session):
+    """Получает все ML-модели."""
+    return get_all(db, MLModel)
+
+
+def get_training_by_id(db: Session, training_id: int):
+    """Получает информацию об обучении по id."""
+    return get_entity(db, Training, 'id', training_id)
+
+
+def get_all_training_entities(db: Session):
+    """Получает все записи об обучениях."""
+    return get_all(db, Training)
+
+
+def get_test_by_id(db: Session, test_id: int):
+    """Получает информацию о тестировании по id."""
+    return get_entity(db, Test, 'id', test_id)
+
+
+def get_all_tests(db: Session):
+    """Получает все записи о тестах."""
+    return get_all(db, Test)
