@@ -5,3 +5,7 @@
 **/.coverage
 **/.pytest_cache
 **/htmlcov
+**/tmp.py
+**/ml_models
+**.db
+**/datasets
