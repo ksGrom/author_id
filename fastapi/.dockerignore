@@ -6,3 +6,8 @@
 **/.pytest_cache
 **/htmlcov
 readme.md
+**/tmp.py
+**/ml_models
+**.db
+**/datasets
+**/user_csv
