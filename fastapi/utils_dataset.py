@@ -371,3 +371,32 @@ def input_file_to_df(file, filename=None, ext=None):
     else:
         raise ValueError(f"invalid extension ({file_ext})")
     return df
+
+
+def __cut_text(text, beginning_cut=0, end_cut=0):
+    """Удаляет из текста `beginning_cut` слов с начала и
+    `end_cut` слов с конца."""
+    end_cut = None if end_cut == 0 else -end_cut
+    return " ".join(text.split()[beginning_cut:end_cut])
+
+
+def df_cut_texts(
+        df: pd.DataFrame,
+        beginning_cut: int = 0,
+        end_cut: int = 0
+):
+    """Во всех текстах в `df` удаляет `beginning_cut` слов с начала
+    и `end_cut` слов с конца."""
+    df = df.copy(deep=True)
+    df.text = df.text.apply(
+        lambda x: __cut_text(x, beginning_cut, end_cut))
+    return df
+
+
+def df_remove_short_texts(df: pd.DataFrame, min_n_words: int = 300):
+    """Удаляет из `df` тексты с количеством слов, меньшим `min_n_words`."""
+    df = df.copy(deep=True)
+    df['n_words'] = df.text.apply(lambda x: len(x.split()))
+    df = df[df.n_words >= min_n_words]
+    df = df.drop('n_words', axis=1)
+    return df

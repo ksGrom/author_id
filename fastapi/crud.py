@@ -411,3 +411,40 @@ def get_test_by_id(db: Session, test_id: int):
 def get_all_tests(db: Session):
     """Получает все записи о тестах."""
     return get_all(db, Test)
+
+
+def merge_uploaded_files(files, res_filename, ext=None, **kwargs):
+    """Объединяет загруженные файлы (txt или csv) в один csv-файл."""
+    df_list = []
+    for file in files:
+        df_list.append(
+            utd.input_file_to_df(file.file, filename=file.filename, ext=ext)
+        )
+    output_df = pd.concat(df_list, axis=0).reset_index(drop=True)
+    if ext == 'txt':
+        output_df['author'] = kwargs.get('author')
+    res_filename += f"_{time()}.csv"
+    path = uf.save_output_df(output_df, res_filename, index=False)
+    return path.name
+
+
+def get_user_csv_path(filename: str):
+    return uf.get_user_csv_path(filename)
+
+
+def cut_texts(file, beginning_cut, end_cut):
+    df = utd.input_file_to_df(file.file, filename=file.filename, ext='csv')
+    output_df = utd.df_cut_texts(df, beginning_cut, end_cut)
+    res_filename = ".".join(file.filename.split(".")[:-1]) \
+                   + f"_CUT_{time()}.csv"
+    path = uf.save_output_df(output_df, res_filename, index=False)
+    return path.name
+
+
+def remove_short_texts(file, min_n_words):
+    df = utd.input_file_to_df(file.file, filename=file.filename, ext='csv')
+    output_df = utd.df_remove_short_texts(df, min_n_words)
+    res_filename = ".".join(file.filename.split(".")[:-1]) \
+                   + f"_PROCESSED_{time()}.csv"
+    path = uf.save_output_df(output_df, res_filename, index=False)
+    return path.name

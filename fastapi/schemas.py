@@ -183,3 +183,7 @@ class DatasetDetailed(Dataset):
 
 class TestDetailed(Test):
     training: TrainingForDataset
+
+
+class UploadedFilename:
+    filename: str

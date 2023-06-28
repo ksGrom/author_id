@@ -1,7 +1,8 @@
 from fastapi import (
     FastAPI, HTTPException, BackgroundTasks,
-    File, UploadFile, Form, Depends, Response
+    File, UploadFile, Form, Depends, Response, Request
 )
+from fastapi.responses import FileResponse
 from time import time
 import joblib
 from db import session_factory
@@ -341,16 +342,87 @@ async def get_model_list(
         return ml_models
 
 
-@app.put('/merge_txt', tags=["Tools"])
-async def merge_txt(upload_files: UploadFile = File(...)):
-    ...
+@app.get('/user_csv/{filename}', tags=["Tools"],
+         status_code=202, response_class=FileResponse)
+async def get_user_csv_file(
+        filename: str
+):
+    """Получение файлов, сформированных с помощью
+    методов из раздела `Tools`."""
+    path, orig_filename = crud.get_user_csv_path(filename)
+    if path is None:
+        raise HTTPException(status_code=404)
+    return FileResponse(
+        path,
+        media_type='text/csv',
+        filename=orig_filename
+    )
 
 
-@app.put('/merge_csv', tags=["Tools"])
-async def merge_csv(upload_files: UploadFile = File(...)):
-    ...
+@app.post('/merge_txt', tags=["Tools"], status_code=201)
+async def merge_txt(
+        filename: str,
+        files: list[UploadFile],
+        request: Request,
+        author: str | None = None
+):
+    """Объединение txt-файлов в csv-файл, подходящий для
+    работы с моделями. Для одного набора txt-файлов
+    можно указать одного автора."""
+    try:
+        output_filename = crud.merge_uploaded_files(
+            files, filename, ext='txt', author=author)
+    except (UnicodeDecodeError, ValueError) as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {'file': request.url_for(
+        "get_user_csv_file", filename=output_filename)}
 
 
-@app.put('/remove_short_texts', tags=["Tools"])
-async def remove_short_texts(upload_file: UploadFile = File(...)):
-    ...
+@app.post('/merge_csv', tags=["Tools"], status_code=201)
+async def merge_csv(
+        filename: str,
+        files: list[UploadFile],
+        request: Request
+):
+    """Объединение csv-файлов в один."""
+    try:
+        output_filename = crud.merge_uploaded_files(
+            files, filename, ext='csv')
+    except (UnicodeDecodeError, ValueError) as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {'file': request.url_for(
+        "get_user_csv_file", filename=output_filename)}
+
+
+@app.post('/cut_texts', tags=["Tools"], status_code=201)
+async def cut_texts(
+        request: Request,
+        beginning_cut: int = Form(default=0),
+        end_cut: int = Form(default=0),
+        file: UploadFile = File(...)
+):
+    """Во всех текстах в загруженном csv-файле удаляет `beginning_cut`
+    слов с начала и `end_cut` слов с конца. Может быть полезно, если
+    в текстах содержится лишняя информация
+    (напр., предисловие, информация об издательстве и т.п.)"""
+    try:
+        output_filename = crud.cut_texts(file, beginning_cut, end_cut)
+    except (UnicodeDecodeError, ValueError) as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {'file': request.url_for(
+        "get_user_csv_file", filename=output_filename)}
+
+
+@app.post('/remove_short_texts', tags=["Tools"], status_code=201)
+async def remove_short_texts(
+        request: Request,
+        min_n_words: int = Form(...),
+        file: UploadFile = File(...)
+):
+    """Удаление текстов с числом слов, меньшим `min_n_words`, из датасета."""
+    try:
+        output_filename = crud.remove_short_texts(file, min_n_words)
+    except (UnicodeDecodeError, ValueError) as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {'file': request.url_for(
+        "get_user_csv_file", filename=output_filename)}
